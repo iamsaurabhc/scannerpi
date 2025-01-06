@@ -1,0 +1,1 @@
+importScripts('https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.3/dist/worker.min.js');

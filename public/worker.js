@@ -1,0 +1,1 @@
+importScripts('https://unpkg.com/tesseract.js@v5.0.3/dist/worker.min.js');
