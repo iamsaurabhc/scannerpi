@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { CameraModal } from "./camera-modal";
 import { Button } from "./ui/button";
-import { Folder, Upload, Clock } from "lucide-react";
+import { Folder, Upload, Clock, Download } from "lucide-react";
+import { ReceiptDetailsModal } from "./receipt-details-modal";
 
 interface Project {
   id: string;
@@ -13,15 +14,45 @@ interface Project {
   description?: string;
 }
 
-interface Receipt {
-  id: string;
-  project_id: string;
-  status: 'processing' | 'completed' | 'error';
-  merchant_name?: string;
-  total?: string;
-  date?: string;
-  created_at: string;
-  file_url?: string;
+export interface Receipt {
+    id: string;
+    project_id: string;
+    status: 'processing' | 'completed' | 'error';
+    receipt_date?: string;
+    receipt_time?: string;
+    subtotal?: number;
+    tax?: number;
+    total?: number;
+    raw_image_url?: string;
+    processing_error?: string;
+    created_at: string;
+    merchant?: {
+      name: string;
+      store_number?: string;
+      address?: string;
+    };
+    line_items?: Array<{
+      category?: string;
+      description: string;
+      quantity: number;
+      unit_price: number;
+      total: number;
+    }>;
+    raw_data?: {
+      date?: string;
+      merchant?: {
+        name: string;
+        store_number?: string;
+        address?: string;
+      };
+      total?: string;
+      items?: Array<{
+        description: string;
+        quantity: string;
+        unit_price: string;
+        total: string;
+      }>;
+    };
 }
 
 interface ReceiptPayload {
@@ -40,6 +71,8 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -81,7 +114,11 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).then(() => {
+        console.log('Subscription cleaned up');
+      }).catch(error => {
+        console.error('Error cleaning up subscription:', error);
+      });
     };
   }, [selectedProject, supabase]);
 
@@ -92,6 +129,8 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
+
+      console.log('Fetched projects:', data);
 
       if (error) {
         console.error('Error fetching projects:', error);
@@ -139,14 +178,65 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   };
 
   const fetchReceipts = async (projectId: string) => {
-    const { data, error } = await supabase
-      .from('receipts')
-      .select('*')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setReceipts(data);
+    try {
+      const { data, error } = await supabase
+        .from('receipts')
+        .select(`
+          *,
+          receipt_merchants (
+            merchant:merchants (
+              name,
+              store_number,
+              address
+            )
+          ),
+          line_items!line_items_receipt_id_fkey (
+            category,
+            description,
+            quantity,
+            unit_price,
+            total
+          )
+        `)
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+    
+      if (error) {
+        console.error('Error fetching receipts:', {
+          error,
+          projectId,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        return;
+      }
+    
+      if (data) {
+        console.log('Raw receipt data:', data);
+        const transformedReceipts = data.map(receipt => {
+          return {
+            id: receipt.id,
+            project_id: receipt.project_id,
+            status: receipt.status,
+            receipt_date: receipt.receipt_date,
+            receipt_time: receipt.receipt_time,
+            subtotal: receipt.subtotal,
+            tax: receipt.tax,
+            total: receipt.total,
+            raw_image_url: receipt.raw_image_url,
+            processing_error: receipt.processing_error,
+            created_at: receipt.created_at,
+            merchant: receipt.receipt_merchants?.[0]?.merchant || null,
+            line_items: receipt.line_items || []
+          };
+        });
+        console.log('Transformed receipts:', transformedReceipts);
+        setReceipts(transformedReceipts);
+      }
+    } catch (error) {
+      console.error('Unexpected error in fetchReceipts:', error);
     }
   };
 
@@ -263,6 +353,63 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
     }
   };
 
+  const exportReceiptToCSV = (receipt: Receipt) => {
+    if (!receipt.raw_data) {
+      console.error('No raw data available for export');
+      return;
+    }
+
+    try {
+      const data = receipt.raw_data;
+      const headers = [
+        'Receipt Date',
+        'Merchant Name',
+        'Total',
+        'Item Description',
+        'Quantity',
+        'Unit Price',
+        'Item Total'
+      ];
+      
+      // Ensure items array exists
+      if (!Array.isArray(data.items)) {
+        throw new Error('Invalid receipt data format');
+      }
+
+      const rows = data.items.map((item: any) => [
+        data.date || receipt.receipt_date || receipt.created_at,
+        data.merchant?.name || receipt.merchant?.name || 'Unknown Merchant',
+        data.total || receipt.total || '0.00',
+        item.description || 'Unknown Item',
+        item.quantity || '1',
+        item.unit_price || '0.00',
+        item.total || '0.00'
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => 
+          row.map(cell => {
+            const escaped = String(cell || '').replace(/"/g, '""');
+            return `"${escaped}"`;
+          }).join(',')
+        )
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `receipt_${receipt.id}_${new Date().toISOString()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href); // Clean up
+    } catch (error) {
+      console.error('Error exporting to CSV:', error);
+      // Here you could add a UI notification for the error
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div className="bg-card rounded-lg p-6 shadow-sm border">
@@ -287,41 +434,76 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
         ) : (
           <div className="divide-y">
             {receipts.map((receipt) => (
-              <div
-                key={receipt.id}
-                className="py-4 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-4">
-                  {receipt.file_url && (
-                    <img 
-                      src={receipt.file_url} 
-                      alt="Receipt thumbnail" 
-                      className="w-12 h-12 object-cover rounded-md"
-                    />
-                  )}
-                  <div className="flex flex-col">
-                    <span className="font-medium">
-                      {receipt.merchant_name || 'Processing...'}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {receipt.date || new Date(receipt.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-lg font-medium">{receipt.total || '...'}</span>
-                  {receipt.status === 'processing' && (
-                    <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                  {receipt.status === 'error' && (
-                    <span className="text-destructive">Error processing receipt</span>
-                  )}
-                </div>
-              </div>
-            ))}
+  <div
+    key={receipt.id}
+    className="py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer"
+    onClick={() => {
+      setSelectedReceipt(receipt);
+      setIsDetailsModalOpen(true);
+    }}
+  >
+    <div className="flex items-center gap-4">
+      {receipt.raw_image_url && (
+        <img 
+          src={receipt.raw_image_url} 
+          alt="Receipt thumbnail" 
+          className="w-12 h-12 object-cover rounded-md"
+        />
+      )}
+      <div className="flex flex-col">
+        <span className="font-medium">
+          {receipt.status === 'completed' 
+            ? receipt.merchant?.name || 'Unknown Merchant'
+            : receipt.status === 'error'
+            ? 'Error Processing'
+            : 'Processing...'}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          {receipt.receipt_date 
+            ? new Date(receipt.receipt_date).toLocaleDateString()
+            : new Date(receipt.created_at).toLocaleDateString()}
+        </span>
+      </div>
+    </div>
+    <div className="flex items-center gap-4">
+      <span className="text-lg font-medium">
+        {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
+      </span>
+      {receipt.status === 'processing' && (
+        <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+      )}
+      {receipt.status === 'completed' && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            exportReceiptToCSV(receipt);
+          }}
+        >
+          <Download className="h-4 w-4" />
+        </Button>
+      )}
+      {receipt.status === 'error' && (
+        <span className="text-destructive" title={receipt.processing_error}>
+          Error processing receipt
+        </span>
+      )}
+    </div>
+  </div>
+))}
           </div>
         )}
       </div>
+      <ReceiptDetailsModal
+        receipt={selectedReceipt}
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedReceipt(null);
+        }}
+        onExport={exportReceiptToCSV}
+      />
     </div>
   );
 }

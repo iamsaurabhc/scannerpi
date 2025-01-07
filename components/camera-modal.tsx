@@ -162,6 +162,11 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
         throw new Error('No image data available');
       }
 
+      console.log('Sending request to API:', {
+        imageDataLength: dataToProcess?.length,
+        projectId
+      });
+
       console.log('Sending image to API...');
       setProcessingStatus('Processing receipt...');
       
@@ -188,7 +193,12 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to process receipt');
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        throw new Error(errorData.error || `Failed to process receipt: ${response.statusText}`);
       }
 
       const result = await response.json();
@@ -229,8 +239,12 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
       }
       
       return parsedData;
-    } catch (error) {
-      console.error('Error processing receipt:', error);
+    } catch (error: any) {
+      console.error('Error processing receipt:', {
+        message: error.message,
+        stack: error.stack,
+        error
+      });
       setProcessingStatus('Error: ' + (error as Error).message);
       throw error;
     }

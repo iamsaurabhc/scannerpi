@@ -9,6 +9,18 @@ const openai = new OpenAI({
 export async function POST(request: Request) {
   try {
     const { image, projectId, receiptId } = await request.json();
+    console.log('Received request:', {
+      hasImage: !!image,
+      projectId,
+      receiptId
+    });
+    if (!image) {
+      return NextResponse.json(
+        { error: 'Image data is required' },
+        { status: 400 }
+      );
+    }
+
     const supabase = await createClient();
 
     // If receiptId is provided, fetch the existing receipt
@@ -44,10 +56,14 @@ export async function POST(request: Request) {
     }
 
     return processReceipt(image, projectId);
-  } catch (error) {
-    console.error('Error processing receipt:', error);
+  } catch (error: any) {
+    console.error('API Error:', {
+      message: error.message,
+      stack: error.stack,
+      error
+    });
     return NextResponse.json(
-      { error: (error as Error).message },
+      { error: (error as Error).message || 'Internal server error' },
       { status: 500 }
     );
   }
@@ -146,7 +162,7 @@ async function processReceipt(image: string, projectId: string) {
             {
               type: "image_url",
               image_url: {
-                url: publicUrl
+                url: `data:image/jpeg;base64,${base64Data}`
               }
             }
           ]
@@ -159,20 +175,7 @@ async function processReceipt(image: string, projectId: string) {
     // 5. Parse the response and update the receipt record
     const extractedData = JSON.parse(response.choices[0].message.content || '{}');
     
-    const { error: updateError } = await supabase
-      .from('receipts')
-      .update({
-        status: 'completed',
-        merchant_name: extractedData.merchant?.name,
-        total: extractedData.total,
-        date: extractedData.date,
-        raw_data: extractedData
-      })
-      .eq('id', receipt.id);
-
-    if (updateError) {
-      throw updateError;
-    }
+    await updateReceiptData(supabase, receipt, extractedData);
 
     return NextResponse.json({ success: true, data: extractedData });
   } catch (error) {
@@ -181,5 +184,107 @@ async function processReceipt(image: string, projectId: string) {
       { error: (error as Error).message },
       { status: 500 }
     );
+  }
+}
+
+async function updateReceiptData(supabase: any, receipt: any, extractedData: any) {
+  try {
+    // 1. Update or create merchant
+    const { data: merchant, error: merchantError } = await supabase
+      .from('merchants')
+      .upsert({
+        name: extractedData.merchant?.name || 'Unknown Merchant',
+        store_number: extractedData.merchant?.store_number,
+        address: extractedData.merchant?.address,
+        // Parse city, state, postal from address if available
+        city: extractedData.merchant?.address?.split(',')[1]?.trim(),
+        state: extractedData.merchant?.address?.split(',')[2]?.split(' ')[1],
+        postal_code: extractedData.merchant?.address?.split(',')[2]?.split(' ')[2]
+      }, {
+        onConflict: 'name,store_number',
+        returning: true
+      })
+      .select()
+      .single();
+
+    if (merchantError) throw merchantError;
+
+    // 2. Add merchant phone numbers if available
+    if (extractedData.merchant?.telephone?.length > 0) {
+      const phoneNumbers = extractedData.merchant.telephone.map((phone: string) => ({
+        merchant_id: merchant.id,
+        phone_number: phone
+      }));
+
+      const { error: phonesError } = await supabase
+        .from('merchant_phones')
+        .upsert(phoneNumbers, {
+          onConflict: 'merchant_id,phone_number'
+        });
+
+      if (phonesError) throw phonesError;
+    }
+
+    // 3. Link receipt to merchant
+    const { error: receiptMerchantError } = await supabase
+      .from('receipt_merchants')
+      .upsert({
+        receipt_id: receipt.id,
+        merchant_id: merchant.id
+      });
+
+    if (receiptMerchantError) throw receiptMerchantError;
+
+    // 4. Update receipt details
+    const { error: receiptError } = await supabase
+      .from('receipts')
+      .update({
+        status: 'completed',
+        receipt_date: extractedData.date,
+        receipt_time: extractedData.time,
+        subtotal: extractedData.subtotal?.replace('$', ''),
+        tax: extractedData.tax?.replace('$', ''),
+        total: extractedData.total?.replace('$', ''),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', receipt.id);
+
+    if (receiptError) throw receiptError;
+
+    // 5. Add line items
+    if (extractedData.items?.length > 0) {
+      const lineItems = extractedData.items.map((item: any) => ({
+        receipt_id: receipt.id,
+        category: item.category,
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price?.replace('$', ''),
+        total: item.total?.replace('$', '')
+      }));
+
+      const { error: lineItemsError } = await supabase
+        .from('line_items')
+        .insert(lineItems);
+
+      if (lineItemsError) throw lineItemsError;
+    }
+
+    // 6. Add payment method if available
+    if (extractedData.payment) {
+      const { error: paymentError } = await supabase
+        .from('payment_methods')
+        .insert({
+          receipt_id: receipt.id,
+          method: extractedData.payment.method,
+          card_last4: extractedData.payment.card_last4
+        });
+
+      if (paymentError) throw paymentError;
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating receipt data:', error);
+    throw error;
   }
 } 
