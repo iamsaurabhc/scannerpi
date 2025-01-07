@@ -359,10 +359,10 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
             setIsCameraActive(true);
             startCamera();
           }}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center rounded-full px-6"
         >
           <Camera className="mr-2 h-4 w-4" />
-          Open Camera
+          Scan
         </Button>
         <Button
           onClick={() => {
@@ -371,10 +371,10 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
             setIsCameraActive(false);
           }}
           variant="outline"
-          className="inline-flex items-center justify-center"
+          className="inline-flex items-center justify-center rounded-full px-6"
         >
           <Upload className="mr-2 h-4 w-4" />
-          Upload File
+          Add Image
         </Button>
       </div>
 
@@ -384,10 +384,10 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
         }
         setIsOpen(open);
       }}>
-        <DialogContent className="sm:max-w-[800px] lg:max-w-[1000px] w-[95vw] max-h-[90vh] overflow-hidden p-2 sm:p-4 lg:p-6">
-          <DialogHeader className="px-2 sm:px-4">
-            <DialogTitle className="text-xl sm:text-2xl lg:text-3xl font-bold text-center">
-              {!extractedData ? "Scan Receipt" : "OCR Results"}
+        <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="px-4 py-6 border-b">
+            <DialogTitle className="text-xl font-semibold text-center">
+              {!extractedData ? "Scan Receipt" : "Review Details"}
             </DialogTitle>
           </DialogHeader>
 
@@ -397,12 +397,14 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
               <TabsTrigger value="data" disabled={!extractedData}>Results</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="camera" className="mt-4 w-full">
-              <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-[16/10] bg-black rounded-lg overflow-hidden max-h-[70vh]">
+            <TabsContent value="camera" className="mt-0">
+              <div className="relative aspect-[3/4] bg-black rounded-none overflow-hidden max-h-[70vh]">
                 {isLoading && (
                   <div className="absolute inset-0 bg-black/50 flex items-center justify-center flex-col gap-4 z-10">
-                    <div className="animate-spin text-2xl">⭮</div>
-                    <p className="text-white text-center">{processingStatus}</p>
+                    <div className="animate-spin">
+                      <RotateCw className="h-6 w-6 text-white" />
+                    </div>
+                    <p className="text-white text-center text-sm">{processingStatus}</p>
                   </div>
                 )}
                 {isCameraActive ? (
@@ -446,18 +448,20 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
                         </Button>
                       </div>
                     ) : (
-                      <div className="absolute inset-0 flex items-center justify-center p-4">
-                        <label className="cursor-pointer w-full">
+                      <div className="absolute inset-0 flex items-center justify-center p-8">
+                        <label className="cursor-pointer w-full max-w-md">
                           <Input
                             type="file"
                             accept="image/*"
                             className="hidden"
                             onChange={handleFileUpload}
                           />
-                          <div className="flex flex-col items-center gap-4 text-muted-foreground">
-                            <Upload className="h-6 w-6 md:h-8 md:w-8" />
-                            <span className="text-sm text-center">Click to upload or drag and drop</span>
-                            <span className="text-xs text-center">PNG, JPG, JPEG image types</span>
+                          <div className="flex flex-col items-center gap-4 text-muted-foreground border-2 border-dashed rounded-lg p-8 hover:border-primary/50 transition-colors">
+                            <Upload className="h-8 w-8" />
+                            <div className="text-center">
+                              <p className="font-medium mb-1">Click to upload or drag and drop</p>
+                              <p className="text-sm text-muted-foreground">PNG, JPG, JPEG supported</p>
+                            </div>
                           </div>
                         </label>
                       </div>

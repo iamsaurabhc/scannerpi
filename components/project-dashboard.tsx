@@ -411,7 +411,7 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="space-y-4 sm:space-y-8">
+    <div className="space-y-4 sm:space-y-8 max-w-[800px] mx-auto w-full">
       <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-3">
