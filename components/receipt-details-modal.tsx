@@ -20,25 +20,25 @@ export function ReceiptDetailsModal({
   if (!receipt) return null;
 
   // Format the raw data to match the expected ReceiptTable interface
-  const formattedData = receipt.raw_data ? {
-    date: receipt.raw_data.date || new Date().toLocaleDateString(),
+  const formattedData = receipt ? {
+    date: receipt.receipt_date || new Date(receipt.created_at).toLocaleDateString(),
     time: receipt.receipt_time || '',
-    total: receipt.raw_data.total || '$0.00',
+    total: receipt.total ? `$${receipt.total.toFixed(2)}` : '$0.00',
     merchant: {
-      name: receipt.raw_data.merchant?.name || 'Unknown Merchant',
-      store_number: receipt.raw_data.merchant?.store_number,
-      address: receipt.raw_data.merchant?.address,
+      name: receipt.merchant?.name || 'Unknown Merchant',
+      store_number: receipt.merchant?.store_number || '',
+      address: receipt.merchant?.address || '',
       telephone: []
     },
-    items: (receipt.raw_data.items || []).map(item => ({
-      category: '',
+    items: (receipt.line_items || []).map(item => ({
+      category: item.category || '',
       description: item.description,
-      quantity: item.quantity || '1',
-      unit_price: item.unit_price || '$0.00',
-      total: item.total || '$0.00'
+      quantity: item.quantity?.toString() || '1',
+      unit_price: item.unit_price ? `$${item.unit_price.toFixed(2)}` : '$0.00',
+      total: item.total ? `$${item.total.toFixed(2)}` : '$0.00'
     })),
-    subtotal: receipt.subtotal?.toString() || '0.00',
-    tax: receipt.tax?.toString() || '0.00',
+    subtotal: receipt.subtotal ? receipt.subtotal.toString() : '0.00',
+    tax: receipt.tax ? receipt.tax.toString() : '0.00',
     payment: {
       method: '',
       card_last4: ''
@@ -47,22 +47,22 @@ export function ReceiptDetailsModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] lg:max-w-[1000px] w-[95vw] max-h-[90vh] overflow-hidden px-4 sm:px-6 lg:px-8">
-        <DialogHeader>
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-[800px] lg:max-w-[1000px] max-h-[90vh] overflow-hidden p-0">
+        <DialogHeader className="px-4 sm:px-6 lg:px-8 py-4">
           <DialogTitle className="text-xl sm:text-2xl lg:text-3xl font-bold text-center">
             Receipt Details
           </DialogTitle>
         </DialogHeader>
         
-        <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-auto lg:h-[70vh] bg-background rounded-lg overflow-hidden">
-          <div className="absolute inset-0 overflow-y-auto pb-16">
-            <div className="p-4 sm:p-6 lg:p-8">
+        <div className="relative h-[calc(90vh-8rem)] bg-background overflow-hidden">
+          <div className="absolute inset-0 overflow-y-auto">
+            <div className="p-2 sm:p-6 lg:p-8">
               {formattedData && <ReceiptTable data={formattedData} />}
             </div>
           </div>
           
           <div className="absolute bottom-0 left-0 right-0 p-3 bg-background/80 backdrop-blur-sm border-t">
-            <div className="max-w-[1000px] mx-auto">
+            <div className="max-w-[1000px] mx-auto px-2 sm:px-0">
               <Button
                 onClick={() => onExport(receipt)}
                 className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
