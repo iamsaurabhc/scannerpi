@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { CameraModal } from "./camera-modal";
 import { Button } from "./ui/button";
-import { Folder, Upload, Clock, Download } from "lucide-react";
+import { Folder, Upload, Clock, Download, Check, X, Loader2, Pencil } from "lucide-react";
 import { ReceiptDetailsModal } from "./receipt-details-modal";
+import { Input } from "./ui/input";
 
 interface Project {
   id: string;
@@ -73,6 +74,10 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
@@ -123,32 +128,35 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   }, [selectedProject, supabase]);
 
   const fetchProjects = async () => {
+    setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data: projectData, error } = await supabase
         .from('projects')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-
-      console.log('Fetched projects:', data);
 
       if (error) {
         console.error('Error fetching projects:', error);
         return;
       }
 
-      if (data) {
-        setProjects(data);
-        if (data.length > 0 && !selectedProject) {
-          setSelectedProject(data[0]);
-          fetchReceipts(data[0].id);
-        } else if (data.length === 0) {
-          // Create default project if none exists
-          createDefaultProject();
-        }
+      // Log the project data for debugging
+      console.log('Fetched projects:', projectData);
+
+      if (projectData && projectData.length > 0) {
+        setProjects(projectData);
+        setSelectedProject(projectData[0]);
+        // Ensure we fetch receipts after setting the project
+        await fetchReceipts(projectData[0].id);
+      } else {
+        // Only create default project if no projects exist
+        await createDefaultProject();
       }
     } catch (error) {
       console.error('Error in fetchProjects:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -171,6 +179,7 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
       if (data) {
         setProjects([data]);
         setSelectedProject(data);
+        fetchReceipts(data.id);
       }
     } catch (error) {
       console.error('Error creating default project:', error);
@@ -178,6 +187,7 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   };
 
   const fetchReceipts = async (projectId: string) => {
+    console.log('Fetching receipts for project:', projectId);
     try {
       const { data, error } = await supabase
         .from('receipts')
@@ -200,43 +210,40 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
         `)
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
-    
+
       if (error) {
-        console.error('Error fetching receipts:', {
-          error,
-          projectId,
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
+        console.error('Error fetching receipts:', error);
         return;
       }
-    
-      if (data) {
-        console.log('Raw receipt data:', data);
-        const transformedReceipts = data.map(receipt => {
-          return {
-            id: receipt.id,
-            project_id: receipt.project_id,
-            status: receipt.status,
-            receipt_date: receipt.receipt_date,
-            receipt_time: receipt.receipt_time,
-            subtotal: receipt.subtotal,
-            tax: receipt.tax,
-            total: receipt.total,
-            raw_image_url: receipt.raw_image_url,
-            processing_error: receipt.processing_error,
-            created_at: receipt.created_at,
-            merchant: receipt.receipt_merchants?.[0]?.merchant || null,
-            line_items: receipt.line_items || []
-          };
-        });
-        console.log('Transformed receipts:', transformedReceipts);
-        setReceipts(transformedReceipts);
+
+      if (!data) {
+        console.log('No receipts found for project:', projectId);
+        setReceipts([]);
+        return;
       }
+
+      const transformedReceipts = data.map(receipt => ({
+        id: receipt.id,
+        project_id: receipt.project_id,
+        status: receipt.status,
+        receipt_date: receipt.receipt_date,
+        receipt_time: receipt.receipt_time,
+        subtotal: receipt.subtotal,
+        tax: receipt.tax,
+        total: receipt.total,
+        raw_image_url: receipt.raw_image_url,
+        processing_error: receipt.processing_error,
+        created_at: receipt.created_at,
+        merchant: receipt.receipt_merchants?.[0]?.merchant || null,
+        line_items: receipt.line_items || [],
+        raw_data: receipt.raw_data
+      }));
+
+      console.log('Transformed receipts:', transformedReceipts);
+      setReceipts(transformedReceipts);
     } catch (error) {
       console.error('Unexpected error in fetchReceipts:', error);
+      setReceipts([]);
     }
   };
 
@@ -410,94 +417,180 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
     }
   };
 
+  const handleSaveProjectName = async () => {
+    if (!selectedProject || !editedName.trim()) return;
+    
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ name: editedName.trim() })
+        .eq('id', selectedProject.id);
+
+      if (error) throw error;
+
+      setProjects(prev => 
+        prev.map(project => 
+          project.id === selectedProject.id 
+            ? { ...project, name: editedName.trim() }
+            : project
+        )
+      );
+      setSelectedProject(prev => prev ? { ...prev, name: editedName.trim() } : null);
+      setIsEditing(false);
+      
+      // Show toast or feedback here if you have a toast component
+    } catch (error) {
+      console.error('Error updating project name:', error);
+      // Show error toast or feedback here
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-8 max-w-[800px] mx-auto w-full">
-      <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
-          <div className="flex items-center gap-3">
-            <Folder className="h-5 w-5 text-primary" />
-            <h2 className="text-lg sm:text-xl font-semibold truncate">
-              {selectedProject?.name || 'Select a Project'}
-            </h2>
-          </div>
-          <CameraModal onUploadComplete={handleReceiptUpload} projectId={selectedProject?.id || ''} />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      ) : (
+        <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
+            <div className="flex items-center gap-3">
+              <Folder className="h-5 w-5 text-primary" />
+              {isEditing ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    className="h-8 text-lg font-semibold"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveProjectName();
+                      } else if (e.key === 'Escape') {
+                        setIsEditing(false);
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-1">
+                    {isSaving ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleSaveProjectName}
+                          className="p-1 hover:bg-primary/10 rounded-full text-primary"
+                        >
+                          <Check className="h-5 w-5" />
+                        </button>
+                        <button
+                          onClick={() => setIsEditing(false)}
+                          className="p-1 hover:bg-destructive/10 rounded-full text-destructive"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 group relative">
+                  <h2 className="text-lg sm:text-xl font-semibold truncate">
+                    {selectedProject?.name || 'Select a Project'}
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setEditedName(selectedProject?.name || '');
+                      setIsEditing(true);
+                    }}
+                    className="p-1 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity absolute -right-7"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+            <CameraModal onUploadComplete={handleReceiptUpload} projectId={selectedProject?.id || ''} />
+          </div>
 
-        {receipts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 sm:py-12 text-center">
-            <Upload className="h-8 sm:h-12 w-8 sm:w-12 text-muted-foreground mb-4" />
-            <h3 className="text-base sm:text-lg font-medium mb-2">No receipts found</h3>
-            <p className="text-sm text-muted-foreground mb-6 px-4">
-              Start by scanning or uploading your first receipt
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y">
-            {receipts.map((receipt) => (
-              <div
-                key={receipt.id}
-                className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
-                onClick={() => {
-                  setSelectedReceipt(receipt);
-                  setIsDetailsModalOpen(true);
-                }}
-              >
-                <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                  {receipt.raw_image_url && (
-                    <img 
-                      src={receipt.raw_image_url} 
-                      alt="Receipt thumbnail" 
-                      className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
-                    />
-                  )}
-                  <div className="flex flex-col min-w-0">
-                    <span className="font-medium text-sm sm:text-base truncate">
-                      {receipt.status === 'completed' 
-                        ? receipt.merchant?.name || 'Unknown Merchant'
-                        : receipt.status === 'error'
-                        ? 'Error Processing'
-                        : 'Processing...'}
-                    </span>
-                    <span className="text-xs sm:text-sm text-muted-foreground">
-                      {receipt.receipt_date 
-                        ? new Date(receipt.receipt_date).toLocaleDateString()
-                        : new Date(receipt.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 sm:gap-4">
-                  <span className="text-base sm:text-lg font-medium whitespace-nowrap">
-                    {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
-                  </span>
-                  <div className="flex items-center">
-                    {receipt.status === 'processing' && (
-                      <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+          {receipts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 sm:py-12 text-center">
+              <Upload className="h-8 sm:h-12 w-8 sm:w-12 text-muted-foreground mb-4" />
+              <h3 className="text-base sm:text-lg font-medium mb-2">No receipts found</h3>
+              <p className="text-sm text-muted-foreground mb-6 px-4">
+                Start by scanning or uploading your first receipt
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {receipts.map((receipt) => (
+                <div
+                  key={receipt.id}
+                  className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
+                  onClick={() => {
+                    setSelectedReceipt(receipt);
+                    setIsDetailsModalOpen(true);
+                  }}
+                >
+                  <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                    {receipt.raw_image_url && (
+                      <img 
+                        src={receipt.raw_image_url} 
+                        alt="Receipt thumbnail" 
+                        className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
+                      />
                     )}
-                    {receipt.status === 'completed' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="hidden sm:inline-flex"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          exportReceiptToCSV(receipt);
-                        }}
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {receipt.status === 'error' && (
-                      <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
-                        Error
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-medium text-sm sm:text-base truncate">
+                        {receipt.status === 'completed' 
+                          ? receipt.merchant?.name || 'Unknown Merchant'
+                          : receipt.status === 'error'
+                          ? 'Error Processing'
+                          : 'Processing...'}
                       </span>
-                    )}
+                      <span className="text-xs sm:text-sm text-muted-foreground">
+                        {receipt.receipt_date 
+                          ? new Date(receipt.receipt_date).toLocaleDateString()
+                          : new Date(receipt.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-4">
+                    <span className="text-base sm:text-lg font-medium whitespace-nowrap">
+                      {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
+                    </span>
+                    <div className="flex items-center">
+                      {receipt.status === 'processing' && (
+                        <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                      {receipt.status === 'completed' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="hidden sm:inline-flex"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            exportReceiptToCSV(receipt);
+                          }}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {receipt.status === 'error' && (
+                        <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
+                          Error
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <ReceiptDetailsModal
         receipt={selectedReceipt}
         isOpen={isDetailsModalOpen}
