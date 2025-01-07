@@ -50,6 +50,7 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [activeTab, setActiveTab] = useState("camera");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const startCamera = async () => {
     try {
@@ -101,16 +102,10 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      console.log('File selected:', {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-
-      if (!file.type.startsWith('image/')) {
-        throw new Error('File must be an image');
-      }
+      setIsOpen(true);
+      setIsCameraActive(false);
       setIsLoading(true);
+      
       try {
         const imageData = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -121,7 +116,6 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
               reject(new Error('Failed to read image file'));
               return;
             }
-            console.log('File read successfully, data length:', result.length);
             resolve(result);
           };
           
@@ -132,12 +126,8 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
           reader.readAsDataURL(file);
         });
 
-        console.log('Starting image processing...');
         setCapturedImage(imageData);
-        setIsCameraActive(false);
-        
         const parsedData = await simulateDataExtraction(imageData);
-        console.log('Processing completed:', parsedData);
         
         if (parsedData) {
           setExtractedData(parsedData);
@@ -336,6 +326,10 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
     document.body.removeChild(link);
   };
 
+  const handleAddFilesClick = () => {
+    fileInputRef.current?.click();
+  };
+
   useEffect(() => {
     if (extractedData) {
       setActiveTab("data");
@@ -364,18 +358,23 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
           <Camera className="mr-2 h-4 w-4" />
           Scan
         </Button>
-        <Button
-          onClick={() => {
-            setIsOpen(true);
-            cleanupState();
-            setIsCameraActive(false);
-          }}
-          variant="outline"
-          className="inline-flex items-center justify-center rounded-full px-6"
-        >
-          <Upload className="mr-2 h-4 w-4" />
-          Add Image
-        </Button>
+        <>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+          <Button
+            onClick={handleAddFilesClick}
+            variant="outline"
+            className="inline-flex items-center justify-center rounded-full px-6"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Add Files
+          </Button>
+        </>
       </div>
 
       <Dialog open={isOpen} onOpenChange={(open) => {
@@ -387,114 +386,43 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
         <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] overflow-hidden p-0">
           <DialogHeader className="px-4 py-6 border-b">
             <DialogTitle className="text-xl font-semibold text-center">
-              {!extractedData ? "Scan Receipt" : "Review Details"}
+              {isLoading ? "Processing Receipt" : "Review Details"}
             </DialogTitle>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 max-w-[400px] mx-auto">
-              <TabsTrigger value="camera">Camera</TabsTrigger>
-              <TabsTrigger value="data" disabled={!extractedData}>Results</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="camera" className="mt-0">
-              <div className="relative aspect-[3/4] bg-black rounded-none overflow-hidden max-h-[70vh]">
-                {isLoading && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center flex-col gap-4 z-10">
-                    <div className="animate-spin">
-                      <RotateCw className="h-6 w-6 text-white" />
-                    </div>
-                    <p className="text-white text-center text-sm">{processingStatus}</p>
-                  </div>
-                )}
-                {isCameraActive ? (
-                  <>
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full h-full object-contain md:object-cover"
-                    />
-                    <Button
-                      onClick={captureImage}
-                      className="absolute bottom-4 left-1/2 transform -translate-x-1/2"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <>
-                          <span className="animate-spin mr-2">⭮</span>
-                          Processing...
-                        </>
-                      ) : (
-                        'Capture Receipt'
-                      )}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    {capturedImage ? (
-                      <div className="relative w-full h-full">
-                        <img
-                          src={capturedImage}
-                          alt="Captured receipt"
-                          className="w-full h-full object-contain md:object-cover"
-                        />
-                        <Button
-                          onClick={resetCamera}
-                          variant="secondary"
-                          className="absolute top-4 right-4"
-                        >
-                          <RotateCw className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center p-8">
-                        <label className="cursor-pointer w-full max-w-md">
-                          <Input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleFileUpload}
-                          />
-                          <div className="flex flex-col items-center gap-4 text-muted-foreground border-2 border-dashed rounded-lg p-8 hover:border-primary/50 transition-colors">
-                            <Upload className="h-8 w-8" />
-                            <div className="text-center">
-                              <p className="font-medium mb-1">Click to upload or drag and drop</p>
-                              <p className="text-sm text-muted-foreground">PNG, JPG, JPEG supported</p>
-                            </div>
-                          </div>
-                        </label>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="data" className="mt-4">
-              <div className="relative aspect-[4/5] sm:aspect-[3/4] lg:aspect-auto lg:h-[70vh] bg-background rounded-lg overflow-hidden">
-                <div className="absolute inset-0 overflow-y-auto pb-0">
-                  <div className="p-4 sm:p-6 lg:p-8">
-                    {extractedData && <ReceiptTable data={extractedData} />}
-                  </div>
+          <div className="relative aspect-[3/4] bg-black rounded-none overflow-hidden max-h-[70vh]">
+            {isLoading ? (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center flex-col gap-4 z-10">
+                <div className="animate-spin">
+                  <RotateCw className="h-6 w-6 text-white" />
                 </div>
-                
-                {extractedData && (
-                  <div className="absolute bottom-0 left-0 right-0 p-3 bg-background/80 backdrop-blur-sm border-t">
-                    <div className="max-w-[1000px] mx-auto">
-                      <Button
-                        onClick={exportToCSV}
-                        className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-                      >
-                        <Download className="mr-2 h-4 w-4"/>
-                        Export to CSV
-                      </Button>
-                    </div>
-                  </div>
+                <p className="text-white text-center text-sm">{processingStatus}</p>
+              </div>
+            ) : (
+              <div className="relative w-full h-full">
+                {capturedImage && (
+                  <img
+                    src={capturedImage}
+                    alt="Captured receipt"
+                    className="w-full h-full object-contain"
+                  />
                 )}
               </div>
-            </TabsContent>
-          </Tabs>
+            )}
+          </div>
+
+          {extractedData && (
+            <div className="p-4">
+              <ReceiptTable data={extractedData} />
+              <Button
+                onClick={exportToCSV}
+                className="w-full mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Download className="mr-2 h-4 w-4"/>
+                Export to CSV
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </>
