@@ -384,8 +384,8 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
         }
         setIsOpen(open);
       }}>
-        <DialogContent className="sm:max-w-[800px] lg:max-w-[1000px] w-[95vw] max-h-[90vh] overflow-hidden px-4 sm:px-6 lg:px-8">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-[800px] lg:max-w-[1000px] w-[95vw] max-h-[90vh] overflow-hidden p-2 sm:p-4 lg:p-6">
+          <DialogHeader className="px-2 sm:px-4">
             <DialogTitle className="text-xl sm:text-2xl lg:text-3xl font-bold text-center">
               {!extractedData ? "Scan Receipt" : "OCR Results"}
             </DialogTitle>

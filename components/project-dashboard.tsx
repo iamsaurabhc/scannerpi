@@ -411,12 +411,12 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="space-y-8">
-      <div className="bg-card rounded-lg p-6 shadow-sm border">
-        <div className="flex items-center justify-between mb-6">
+    <div className="space-y-4 sm:space-y-8">
+      <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
           <div className="flex items-center gap-3">
             <Folder className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-lg sm:text-xl font-semibold truncate">
               {selectedProject?.name || 'Select a Project'}
             </h2>
           </div>
@@ -424,74 +424,77 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
         </div>
 
         {receipts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <Upload className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No receipts found</h3>
-            <p className="text-sm text-muted-foreground mb-6">
+          <div className="flex flex-col items-center justify-center py-8 sm:py-12 text-center">
+            <Upload className="h-8 sm:h-12 w-8 sm:w-12 text-muted-foreground mb-4" />
+            <h3 className="text-base sm:text-lg font-medium mb-2">No receipts found</h3>
+            <p className="text-sm text-muted-foreground mb-6 px-4">
               Start by scanning or uploading your first receipt
             </p>
           </div>
         ) : (
           <div className="divide-y">
             {receipts.map((receipt) => (
-  <div
-    key={receipt.id}
-    className="py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer"
-    onClick={() => {
-      setSelectedReceipt(receipt);
-      setIsDetailsModalOpen(true);
-    }}
-  >
-    <div className="flex items-center gap-4">
-      {receipt.raw_image_url && (
-        <img 
-          src={receipt.raw_image_url} 
-          alt="Receipt thumbnail" 
-          className="w-12 h-12 object-cover rounded-md"
-        />
-      )}
-      <div className="flex flex-col">
-        <span className="font-medium">
-          {receipt.status === 'completed' 
-            ? receipt.merchant?.name || 'Unknown Merchant'
-            : receipt.status === 'error'
-            ? 'Error Processing'
-            : 'Processing...'}
-        </span>
-        <span className="text-sm text-muted-foreground">
-          {receipt.receipt_date 
-            ? new Date(receipt.receipt_date).toLocaleDateString()
-            : new Date(receipt.created_at).toLocaleDateString()}
-        </span>
-      </div>
-    </div>
-    <div className="flex items-center gap-4">
-      <span className="text-lg font-medium">
-        {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
-      </span>
-      {receipt.status === 'processing' && (
-        <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
-      )}
-      {receipt.status === 'completed' && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            exportReceiptToCSV(receipt);
-          }}
-        >
-          <Download className="h-4 w-4" />
-        </Button>
-      )}
-      {receipt.status === 'error' && (
-        <span className="text-destructive" title={receipt.processing_error}>
-          Error processing receipt
-        </span>
-      )}
-    </div>
-  </div>
-))}
+              <div
+                key={receipt.id}
+                className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
+                onClick={() => {
+                  setSelectedReceipt(receipt);
+                  setIsDetailsModalOpen(true);
+                }}
+              >
+                <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                  {receipt.raw_image_url && (
+                    <img 
+                      src={receipt.raw_image_url} 
+                      alt="Receipt thumbnail" 
+                      className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
+                    />
+                  )}
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-medium text-sm sm:text-base truncate">
+                      {receipt.status === 'completed' 
+                        ? receipt.merchant?.name || 'Unknown Merchant'
+                        : receipt.status === 'error'
+                        ? 'Error Processing'
+                        : 'Processing...'}
+                    </span>
+                    <span className="text-xs sm:text-sm text-muted-foreground">
+                      {receipt.receipt_date 
+                        ? new Date(receipt.receipt_date).toLocaleDateString()
+                        : new Date(receipt.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 sm:gap-4">
+                  <span className="text-base sm:text-lg font-medium whitespace-nowrap">
+                    {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
+                  </span>
+                  <div className="flex items-center">
+                    {receipt.status === 'processing' && (
+                      <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                    {receipt.status === 'completed' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="hidden sm:inline-flex"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportReceiptToCSV(receipt);
+                        }}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {receipt.status === 'error' && (
+                      <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
+                        Error
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

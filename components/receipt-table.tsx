@@ -71,15 +71,15 @@ export function ReceiptTable({ data }: ReceiptTableProps) {
 
       {/* Items Table - Single table structure */}
       <div className="border rounded-lg shadow-sm mt-6 flex-1">
-        <div className="overflow-auto max-h-[calc(100vh-300px)]"> {/* Adjusted height */}
+        <div className="overflow-auto max-h-[calc(100vh-350px)] sm:max-h-[calc(100vh-300px)]">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="w-[15%] lg:w-[35%] min-w-[60px]">Item</TableHead>
-                <TableHead className="w-[25%] min-w-[120px] hidden md:table-cell">Category</TableHead>
-                <TableHead className="w-[15%] lg:w-[10%] min-w-[80px] text-right">Qty</TableHead>
-                <TableHead className="w-[15%] lg:w-[10%] min-w-[80px] text-right">Unit Price</TableHead>
-                <TableHead className="w-[15%] lg:w-[10%] min-w-[80px] text-right">Total</TableHead>
+                <TableHead className="w-[40%] sm:w-[35%] min-w-[120px]">Item</TableHead>
+                <TableHead className="hidden sm:table-cell w-[25%] min-w-[120px]">Category</TableHead>
+                <TableHead className="w-[20%] sm:w-[10%] min-w-[60px] text-right">Qty</TableHead>
+                <TableHead className="hidden sm:table-cell w-[15%] sm:w-[10%] min-w-[80px] text-right">Unit</TableHead>
+                <TableHead className="w-[20%] sm:w-[10%] min-w-[80px] text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
