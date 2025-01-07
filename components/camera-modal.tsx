@@ -65,14 +65,24 @@ export function CameraModal({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: {
-          facingMode: { ideal: 'environment' }
+          facingMode: { exact: 'environment' }
         }
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.error("Error accessing camera:", err);
+      console.warn("Couldn't access rear camera, falling back:", err);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: true
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      } catch (fallbackErr) {
+        console.error("Error accessing camera:", fallbackErr);
+      }
     }
   };
 
@@ -409,64 +419,71 @@ export function CameraModal({
         }
         setIsOpen(open);
       }}>
-        <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] overflow-hidden p-0">
-          <DialogHeader className="px-4 py-6 border-b">
-            <DialogTitle className="text-xl font-semibold text-center">
-              Capture Receipt
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="relative aspect-[3/4] bg-black rounded-none overflow-hidden max-h-[70vh]">
-            {isLoading ? (
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center flex-col gap-4 z-10">
-                <div className="animate-spin">
-                  <RotateCw className="h-6 w-6 text-white" />
+        <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] overflow-hidden rounded-lg p-0">
+          <div className="relative h-full">
+            <div className="relative w-full h-[90vh] bg-gray-900 overflow-hidden">
+              {isLoading ? (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center flex-col gap-4 z-10">
+                  <div className="animate-spin">
+                    <RotateCw className="h-8 w-8 text-white" />
+                  </div>
+                  <p className="text-white text-center text-sm font-medium">{processingStatus}</p>
                 </div>
-                <p className="text-white text-center text-sm">{processingStatus}</p>
-              </div>
-            ) : isCameraActive ? (
-              <div className="relative w-full h-full">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+              ) : isCameraActive ? (
+                <div className="relative w-full h-full">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 pointer-events-none border-2 border-white/20 m-4 rounded-lg"></div>
+                  <div className="absolute bottom-6 left-0 right-0 flex justify-center">
+                    <Button
+                      onClick={captureImage}
+                      className="rounded-full w-16 h-16 bg-white shadow-lg hover:bg-gray-100 transition-colors"
+                      disabled={isLoading}
+                    >
+                      <Camera className="h-8 w-8 text-black" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative w-full h-full bg-gray-100">
+                  {capturedImage && (
+                    <img
+                      src={capturedImage}
+                      alt="Captured receipt"
+                      className="w-full h-full object-contain rounded-lg"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="absolute top-0 left-0 right-0 bg-black/30 backdrop-blur-sm">
+              <DialogHeader className="px-6 py-4">
+                <DialogTitle className="text-xl font-semibold text-white">
+                  Scan Receipt
+                </DialogTitle>
+              </DialogHeader>
+            </div>
+
+            {extractedData && (
+              <div className="absolute bottom-0 left-0 right-0 bg-white border-t">
+                <div className="p-6">
+                  <ReceiptTable data={extractedData} />
                   <Button
-                    onClick={captureImage}
-                    className="rounded-full w-16 h-16 bg-white"
-                    disabled={isLoading}
+                    onClick={exportToCSV}
+                    className="w-full mt-6 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg h-11"
                   >
-                    <Camera className="h-8 w-8 text-black" />
+                    <Download className="mr-2 h-5 w-5"/>
+                    Export to CSV
                   </Button>
                 </div>
               </div>
-            ) : (
-              <div className="relative w-full h-full">
-                {capturedImage && (
-                  <img
-                    src={capturedImage}
-                    alt="Captured receipt"
-                    className="w-full h-full object-contain"
-                  />
-                )}
-              </div>
             )}
           </div>
-
-          {extractedData && (
-            <div className="p-4">
-              <ReceiptTable data={extractedData} />
-              <Button
-                onClick={exportToCSV}
-                className="w-full mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <Download className="mr-2 h-4 w-4"/>
-                Export to CSV
-              </Button>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </>

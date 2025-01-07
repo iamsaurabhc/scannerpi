@@ -279,17 +279,15 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
         .from('receipts')
         .getPublicUrl(fileName);
 
-      // Create receipt record
+      // Create receipt record with correct column names
       const { data, error } = await supabase
         .from('receipts')
         .insert([
           {
             project_id: selectedProject.id,
             status: 'processing',
-            merchant_name: extractedData.merchant?.name,
-            total: extractedData.total,
-            date: extractedData.date,
-            file_url: publicUrl,
+            receipt_date: extractedData.date,
+            raw_image_url: publicUrl,
             raw_data: extractedData
           }
         ])
