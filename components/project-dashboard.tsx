@@ -458,7 +458,6 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
         <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
             <div className="flex items-center gap-3">
-              <Folder className="h-5 w-5 text-primary" />
               {isEditing ? (
                 <div className="flex items-center gap-2">
                   <Input
@@ -496,18 +495,18 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 group relative">
-                  <h2 className="text-lg sm:text-xl font-semibold truncate">
-                    {selectedProject?.name || 'Select a Project'}
-                  </h2>
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       setEditedName(selectedProject?.name || '');
                       setIsEditing(true);
                     }}
-                    className="p-1 rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity absolute -right-7"
+                    className="group relative flex items-center"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <h2 className="text-lg sm:text-xl font-semibold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 transition-colors cursor-pointer">
+                      {selectedProject?.name || 'Select a Project'}
+                    </h2>
+                    <Pencil className="h-4 w-4 ml-2 text-muted-foreground" />
                   </button>
                 </div>
               )}
