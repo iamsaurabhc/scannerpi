@@ -4,9 +4,15 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { CameraModal } from "./camera-modal";
 import { Button } from "./ui/button";
-import { Folder, Upload, Clock, Download, Check, X, Loader2, Pencil } from "lucide-react";
+import { Folder, Upload, Clock, Download, Check, X, Loader2, Pencil, Plus, Camera } from "lucide-react";
 import { ReceiptDetailsModal } from "./receipt-details-modal";
 import { Input } from "./ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
 
 interface Project {
   id: string;
@@ -78,6 +84,8 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
   const [editedName, setEditedName] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -448,16 +456,73 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      try {
+        const imageData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const result = e.target?.result as string;
+            if (!result) {
+              reject(new Error('Failed to read image file'));
+              return;
+            }
+            resolve(result);
+          };
+          reader.onerror = () => {
+            reject(new Error('Error reading file'));
+          };
+          reader.readAsDataURL(file);
+        });
+
+        const response = await fetch('/api/process-receipt', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            image: imageData,
+            projectId: selectedProject?.id 
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to process receipt');
+        }
+
+        const extractedData = await response.json();
+        handleReceiptUpload(extractedData, imageData);
+      } catch (error) {
+        console.error('Error processing file:', error);
+      }
+    }
+  };
+
   return (
-    <div className="space-y-4 sm:space-y-8 max-w-[800px] mx-auto w-full">
-      {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 sm:mb-6">
-            <div className="flex items-center gap-3">
+    <>
+      <CameraModal 
+        projectId={selectedProject?.id || ''}
+        onUploadComplete={handleReceiptUpload}
+        defaultOpen={isOpen}
+        onOpenChange={setIsOpen}
+        hideDefaultButtons={true}
+      />
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileUpload}
+        data-file-input
+      />
+      <div className="space-y-4 sm:space-y-8 max-w-[800px] mx-auto w-full">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="bg-card rounded-lg p-4 sm:p-6 shadow-sm border">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
               {isEditing ? (
                 <div className="flex items-center gap-2">
                   <Input
@@ -495,111 +560,146 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
+                <>
                   <button
-                    onClick={() => {
-                      setEditedName(selectedProject?.name || '');
-                      setIsEditing(true);
-                    }}
-                    className="group relative flex items-center"
-                  >
-                    <h2 className="text-lg sm:text-xl font-semibold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 transition-colors cursor-pointer">
-                      {selectedProject?.name || 'Select a Project'}
-                    </h2>
-                    <Pencil className="h-4 w-4 ml-2 text-muted-foreground" />
-                  </button>
-                </div>
+                  onClick={() => {
+                    setEditedName(selectedProject?.name || '');
+                    setIsEditing(true);
+                  }}
+                  className="group relative flex items-center"
+                >
+                  <h2 className="text-lg sm:text-xl font-semibold bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 bg-clip-text text-transparent hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 transition-colors cursor-pointer">
+                    {selectedProject?.name || 'Select a Project'}
+                  </h2>
+                  <Pencil className="h-4 w-4 ml-2 text-muted-foreground" />
+                </button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="relative group">
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 animate-gradient group-hover:opacity-75 blur opacity-25 transition-opacity"></div>
+                      <div className="relative bg-background hover:bg-accent rounded-full p-2.5 transition-colors">
+                        <Plus className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      </div>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem>
+                      <button 
+                        className="w-full flex items-center gap-2 cursor-pointer"
+                        onClick={() => setIsOpen(true)}
+                      >
+                        <Camera className="h-4 w-4" />
+                        <span>Scan Receipt</span>
+                      </button>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <button 
+                        className="w-full flex items-center gap-2 cursor-pointer"
+                        onClick={() => {
+                          const fileInput = document.querySelector('[data-file-input]');
+                          if (fileInput) {
+                            (fileInput as HTMLInputElement).click();
+                          }
+                        }}
+                      >
+                        <Upload className="h-4 w-4" />
+                        <span>Add Files</span>
+                      </button>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                </>
               )}
             </div>
-            <CameraModal onUploadComplete={handleReceiptUpload} projectId={selectedProject?.id || ''} />
-          </div>
 
-          {receipts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 sm:py-12 text-center">
-              <Upload className="h-8 sm:h-12 w-8 sm:w-12 text-muted-foreground mb-4" />
-              <h3 className="text-base sm:text-lg font-medium mb-2">No receipts found</h3>
-              <p className="text-sm text-muted-foreground mb-6 px-4">
-                Start by scanning or uploading your first receipt
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {receipts.map((receipt) => (
-                <div
-                  key={receipt.id}
-                  className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
-                  onClick={() => {
-                    setSelectedReceipt(receipt);
-                    setIsDetailsModalOpen(true);
-                  }}
-                >
-                  <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                    {receipt.raw_image_url && (
-                      <img 
-                        src={receipt.raw_image_url} 
-                        alt="Receipt thumbnail" 
-                        className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
-                      />
-                    )}
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-medium text-sm sm:text-base truncate">
-                        {receipt.status === 'completed' 
-                          ? receipt.merchant?.name || 'Unknown Merchant'
-                          : receipt.status === 'error'
-                          ? 'Error Processing'
-                          : 'Processing...'}
-                      </span>
-                      <span className="text-xs sm:text-sm text-muted-foreground">
-                        {receipt.receipt_date 
-                          ? new Date(receipt.receipt_date).toLocaleDateString()
-                          : new Date(receipt.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-4">
-                    <span className="text-base sm:text-lg font-medium whitespace-nowrap">
-                      {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
-                    </span>
-                    <div className="flex items-center">
-                      {receipt.status === 'processing' && (
-                        <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+            {receipts.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 sm:py-12 text-center">
+                <Upload className="h-8 sm:h-12 w-8 sm:w-12 text-muted-foreground mb-4" />
+                <h3 className="text-base sm:text-lg font-medium mb-2">No receipts found</h3>
+                <p className="text-sm text-muted-foreground mb-6 px-4">
+                  Start by scanning or uploading your first receipt
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {receipts.map((receipt) => (
+                  <div
+                    key={receipt.id}
+                    className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
+                    onClick={() => {
+                      setSelectedReceipt(receipt);
+                      setIsDetailsModalOpen(true);
+                    }}
+                  >
+                    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                      {receipt.raw_image_url && (
+                        <img 
+                          src={receipt.raw_image_url} 
+                          alt="Receipt thumbnail" 
+                          className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
+                        />
                       )}
-                      {receipt.status === 'completed' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="hidden sm:inline-flex"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            exportReceiptToCSV(receipt);
-                          }}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {receipt.status === 'error' && (
-                        <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
-                          Error
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-medium text-sm sm:text-base truncate">
+                          {receipt.status === 'completed' 
+                            ? receipt.merchant?.name || 'Unknown Merchant'
+                            : receipt.status === 'error'
+                            ? 'Error Processing'
+                            : 'Processing...'}
                         </span>
-                      )}
+                        <span className="text-xs sm:text-sm text-muted-foreground">
+                          {receipt.receipt_date 
+                            ? new Date(receipt.receipt_date).toLocaleDateString()
+                            : new Date(receipt.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 sm:gap-4">
+                      <span className="text-base sm:text-lg font-medium whitespace-nowrap">
+                        {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
+                      </span>
+                      <div className="flex items-center">
+                        {receipt.status === 'processing' && (
+                          <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                        {receipt.status === 'completed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="hidden sm:inline-flex"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              exportReceiptToCSV(receipt);
+                            }}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {receipt.status === 'error' && (
+                          <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
+                            Error
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      <ReceiptDetailsModal
-        receipt={selectedReceipt}
-        isOpen={isDetailsModalOpen}
-        onClose={() => {
-          setIsDetailsModalOpen(false);
-          setSelectedReceipt(null);
-        }}
-        onExport={exportReceiptToCSV}
-      />
-    </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <ReceiptDetailsModal
+          receipt={selectedReceipt}
+          isOpen={isDetailsModalOpen}
+          onClose={() => {
+            setIsDetailsModalOpen(false);
+            setSelectedReceipt(null);
+          }}
+          onExport={exportReceiptToCSV}
+        />
+      </div>
+    </>
   );
 }
 

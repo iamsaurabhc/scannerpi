@@ -39,10 +39,19 @@ interface ExtractedData {
 interface CameraModalProps {
   onUploadComplete?: (extractedData: any, imageData: string) => Promise<void>;
   projectId: string;
+  onOpenChange?: (open: boolean) => void;
+  defaultOpen?: boolean;
+  hideDefaultButtons?: boolean;
 }
 
-export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function CameraModal({ 
+  onUploadComplete, 
+  projectId,
+  onOpenChange,
+  defaultOpen = false,
+  hideDefaultButtons = false 
+}: CameraModalProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [isCameraActive, setIsCameraActive] = useState(true);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -343,39 +352,56 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
     };
   }, []);
 
+  // Update parent when internal state changes
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
+
+  // Update internal state when parent changes defaultOpen
+  useEffect(() => {
+    setIsOpen(defaultOpen);
+    if (defaultOpen) {
+      setIsCameraActive(true);
+      startCamera();
+    }
+  }, [defaultOpen]);
+
   return (
     <>
-      <div className="flex gap-2">
-        <Button
-          onClick={() => {
-            setIsOpen(true);
-            cleanupState();
-            setIsCameraActive(true);
-            startCamera();
-          }}
-          className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center rounded-full px-6"
-        >
-          <Camera className="mr-2 h-4 w-4" />
-          Scan
-        </Button>
-        <>
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileUpload}
-          />
+      {!hideDefaultButtons && (
+        <div className="flex gap-2">
           <Button
-            onClick={handleAddFilesClick}
-            variant="outline"
-            className="inline-flex items-center justify-center rounded-full px-6"
+            onClick={() => {
+              setIsOpen(true);
+              cleanupState();
+              setIsCameraActive(true);
+              startCamera();
+            }}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex items-center justify-center rounded-full px-6"
           >
-            <Upload className="mr-2 h-4 w-4" />
-            Add Files
+            <Camera className="mr-2 h-4 w-4" />
+            Scan
           </Button>
-        </>
-      </div>
+          <>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileUpload}
+              data-file-input
+            />
+            <Button
+              onClick={handleAddFilesClick}
+              variant="outline"
+              className="inline-flex items-center justify-center rounded-full px-6"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Add Files
+            </Button>
+          </>
+        </div>
+      )}
 
       <Dialog open={isOpen} onOpenChange={(open) => {
         if (!open) {
@@ -386,7 +412,7 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
         <DialogContent className="sm:max-w-[800px] w-[95vw] max-h-[90vh] overflow-hidden p-0">
           <DialogHeader className="px-4 py-6 border-b">
             <DialogTitle className="text-xl font-semibold text-center">
-              {isLoading ? "Processing Receipt" : "Review Details"}
+              Capture Receipt
             </DialogTitle>
           </DialogHeader>
 
@@ -397,6 +423,24 @@ export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
                   <RotateCw className="h-6 w-6 text-white" />
                 </div>
                 <p className="text-white text-center text-sm">{processingStatus}</p>
+              </div>
+            ) : isCameraActive ? (
+              <div className="relative w-full h-full">
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center">
+                  <Button
+                    onClick={captureImage}
+                    className="rounded-full w-16 h-16 bg-white"
+                    disabled={isLoading}
+                  >
+                    <Camera className="h-8 w-8 text-black" />
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="relative w-full h-full">
