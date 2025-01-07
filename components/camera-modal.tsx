@@ -15,6 +15,8 @@ interface ExtractedData {
   date: string;
   time: string;
   total: string;
+  subtotal: string;
+  tax: string;
   merchant: {
     name: string;
     store_number?: string;
@@ -34,7 +36,12 @@ interface ExtractedData {
   };
 }
 
-export function CameraModal() {
+interface CameraModalProps {
+  onUploadComplete?: (extractedData: any, imageData: string) => Promise<void>;
+  projectId: string;
+}
+
+export function CameraModal({ onUploadComplete, projectId }: CameraModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(true);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -158,12 +165,25 @@ export function CameraModal() {
       console.log('Sending image to API...');
       setProcessingStatus('Processing receipt...');
       
+      if (!onUploadComplete) {
+        throw new Error('Upload handler not provided');
+      }
+
+      const requestBody: any = { 
+        image: dataToProcess
+      };
+
+      // Only include projectId if it exists
+      if (projectId) {
+        requestBody.projectId = projectId;
+      }
+
       const response = await fetch('/api/process-receipt', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ image: dataToProcess })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -203,7 +223,11 @@ export function CameraModal() {
         payment: result.payment
       };
 
-      console.log('Parsed data:', parsedData);
+      // Only call onUploadComplete if it exists
+      if (onUploadComplete) {
+        await onUploadComplete(parsedData, imageData || '');
+      }
+      
       return parsedData;
     } catch (error) {
       console.error('Error processing receipt:', error);
@@ -230,31 +254,30 @@ export function CameraModal() {
   const exportToCSV = () => {
     if (!extractedData) return;
 
-    // Prepare the CSV data
+    // Prepare the CSV data with more detailed columns
     const headers = [
-      'Date',
-      'Time',
-      'Merchant',
+      'Receipt Date',
+      'Receipt Time',
+      'Merchant Name',
       'Store Number',
       'Address',
-      'Telephone',
-      'Item Description',
+      'Phone',
       'Category',
+      'Item Description',
       'Quantity',
       'Unit Price',
       'Item Total',
+      'Receipt Subtotal',
+      'Tax',
+      'Receipt Total',
       'Payment Method',
       'Card Last 4'
     ];
     
     const rows: string[][] = [];
 
-    // Add items rows with calculated totals
+    // Add items rows with all receipt details
     extractedData.items.forEach(item => {
-      const quantity = parseFloat(item.quantity || '1');
-      const unitPrice = parseFloat(item.unit_price?.replace('$', '') || '0');
-      const itemTotal = (quantity * unitPrice).toFixed(2);
-
       rows.push([
         extractedData.date || '',
         extractedData.time || '',
@@ -262,28 +285,38 @@ export function CameraModal() {
         extractedData.merchant.store_number || '',
         extractedData.merchant.address || '',
         extractedData.merchant.telephone?.[0] || '',
-        item.description || '',
         item.category || '',
+        item.description || '',
         item.quantity || '1',
         item.unit_price || '$0.00',
-        `$${itemTotal}`,
+        item.total || '$0.00',
+        extractedData.subtotal || '$0.00',
+        extractedData.tax || '$0.00',
+        extractedData.total || '$0.00',
         extractedData.payment?.method || '',
         extractedData.payment?.card_last4 || ''
       ]);
     });
 
-    // Convert to CSV string
+    // Convert to CSV string with proper escaping
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...rows.map(row => 
+        row.map(cell => {
+          // Escape special characters and wrap in quotes
+          const escaped = cell.replace(/"/g, '""');
+          return `"${escaped}"`;
+        }).join(',')
+      )
     ].join('\n');
 
-    // Create and trigger download
+    // Create and trigger download with formatted filename
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `receipt_${extractedData.date.replace(/[/\\]/g, '-')}.csv`);
+    link.setAttribute('download', `receipt_export_${timestamp}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

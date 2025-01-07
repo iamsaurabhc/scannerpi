@@ -14,8 +14,68 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "ScannerPI - Receipt Scanner",
-  description: "Transform your paper receipts and invoices into structured data",
+  title: "ScannerPI - AI Receipt Scanner & Data Extractor",
+  description: "Transform receipts into structured data with AI. Scan receipts, bills & invoices for expense tracking, sales analysis & ERP integration. Export to CSV instantly.",
+  keywords: [
+    "receipt scanner",
+    "OCR",
+    "expense tracking",
+    "invoice scanner",
+    "receipt OCR",
+    "data extraction",
+    "CSV export",
+    "AI receipt processing",
+    "expense management",
+    "document scanning",
+    "receipt digitization",
+    "business automation",
+    "ERP integration",
+    "receipt parser",
+    "digital receipts"
+  ],
+  authors: [{ name: "KernelPI" }],
+  creator: "KernelPI",
+  publisher: "KernelPI",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  openGraph: {
+    title: "ScannerPI - AI Receipt Scanner & Data Extractor",
+    description: "Transform receipts into structured data with AI. Scan receipts, bills & invoices for expense tracking, sales analysis & ERP integration. Export to CSV instantly.",
+    url: defaultUrl,
+    siteName: "ScannerPI",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ScannerPI - AI Receipt Scanner & Data Extractor",
+    description: "Transform receipts into structured data with AI. Scan receipts, bills & invoices for expense tracking, sales analysis & ERP integration. Export to CSV instantly.",
+    creator: "@kernelpi",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  verification: {
+    google: "your-google-verification-code",
+  },
+};
+
+export const viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: 'rgba(96, 165, 250, 0.2)' },
+    { media: '(prefers-color-scheme: dark)', color: 'rgba(29, 78, 216, 0.25)' }
+  ]
 };
 
 const geistSans = Geist({
@@ -30,7 +90,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={geistSans.className} suppressHydrationWarning>
-      <body className="bg-background text-foreground">
+      <body className="bg-background text-foreground" suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

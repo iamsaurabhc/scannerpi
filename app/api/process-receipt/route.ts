@@ -1,4 +1,5 @@
 import { OpenAI } from 'openai';
+import { createClient } from '@/utils/supabase/server';
 import { NextResponse } from 'next/server';
 
 const openai = new OpenAI({
@@ -7,14 +8,105 @@ const openai = new OpenAI({
 
 export async function POST(request: Request) {
   try {
-    console.log('Starting receipt processing...');
-    const { image } = await request.json();
-    
-    if (!image || !image.startsWith('data:image')) {
-      return NextResponse.json({ error: 'Invalid image data' }, { status: 400 });
+    const { image, projectId, receiptId } = await request.json();
+    const supabase = await createClient();
+
+    // If receiptId is provided, fetch the existing receipt
+    if (receiptId) {
+      const { data: existingReceipt, error: fetchError } = await supabase
+        .from('receipts')
+        .select('*')
+        .eq('id', receiptId)
+        .single();
+
+      if (fetchError || !existingReceipt) {
+        throw new Error('Receipt not found');
+      }
+
+      // Use the project_id from the existing receipt
+      return processReceipt(existingReceipt.raw_image_url, existingReceipt.project_id);
     }
 
-    console.log('Sending request to OpenAI...');
+    // For direct image upload flow
+    if (!image) {
+      return NextResponse.json(
+        { error: 'Image is required' },
+        { status: 400 }
+      );
+    }
+
+    // Only validate projectId if not in preview mode
+    if (!projectId && process.env.NODE_ENV !== 'development') {
+      return NextResponse.json(
+        { error: 'ProjectId is required' },
+        { status: 400 }
+      );
+    }
+
+    return processReceipt(image, projectId);
+  } catch (error) {
+    console.error('Error processing receipt:', error);
+    return NextResponse.json(
+      { error: (error as Error).message },
+      { status: 500 }
+    );
+  }
+}
+
+// Helper function to process the receipt
+async function processReceipt(image: string, projectId: string) {
+  const supabase = await createClient();
+  
+  // Validate image data
+  if (!image.startsWith('data:image/')) {
+    throw new Error('Invalid image format');
+  }
+
+  // Extract base64 data - handle both with and without data URI prefix
+  const base64Data = image.includes('base64,') 
+    ? image.split('base64,')[1] 
+    : image;
+
+  try {
+    // 1. Upload image to Supabase Storage
+    const fileName = `receipts/${projectId}/${Date.now()}.jpg`;
+    const { data: fileData, error: uploadError } = await supabase.storage
+      .from('receipts')
+      .upload(fileName, Buffer.from(base64Data, 'base64'), {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      throw new Error(`Failed to upload image: ${uploadError.message}`);
+    }
+
+    // 2. Get the public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('receipts')
+      .getPublicUrl(fileName);
+
+    // 3. Create initial receipt record
+    const { data: receipt, error: insertError } = await supabase
+      .from('receipts')
+      .insert([
+        {
+          project_id: projectId,
+          status: 'processing',
+          raw_image_url: publicUrl
+        }
+      ])
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Insert error:', insertError);
+      throw new Error('Failed to create receipt record');
+    }
+
+    // 4. Process with OpenAI
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -29,7 +121,7 @@ export async function POST(request: Request) {
                     "name": "Store Name",
                     "store_number": "Store #XXX",
                     "address": "Full Street Address, City, State ZIP",
-                    "telephone": ["XXX-XXX-XXXX", "XXX-XXX-XXXX"]
+                    "telephone": ["XXX-XXX-XXXX"]
                 },
                 "date": "MM/DD/YYYY",
                 "time": "HH:MM AM/PM",
@@ -49,12 +141,12 @@ export async function POST(request: Request) {
                     "method": "Payment method if available",
                     "card_last4": "Last 4 digits if available"
                 }
-                }`,
+                }`
             },
             {
               type: "image_url",
               image_url: {
-                url: image
+                url: publicUrl
               }
             }
           ]
@@ -64,28 +156,29 @@ export async function POST(request: Request) {
       response_format: { type: "json_object" }
     });
 
-    console.log('OpenAI response received');
+    // 5. Parse the response and update the receipt record
+    const extractedData = JSON.parse(response.choices[0].message.content || '{}');
     
-    let extractedData;
-    try {
-      // Clean the response content of any markdown formatting
-      const content = response.choices[0].message.content?.trim().replace(/```json\n?|\n?```/g, '') || '{}';
-      extractedData = JSON.parse(content);
-    } catch (parseError) {
-      console.error('Failed to parse OpenAI response as JSON:', parseError);
-      console.error('Raw response:', response.choices[0].message.content);
-      return NextResponse.json(
-        { error: 'Failed to parse receipt data' },
-        { status: 422 }
-      );
+    const { error: updateError } = await supabase
+      .from('receipts')
+      .update({
+        status: 'completed',
+        merchant_name: extractedData.merchant?.name,
+        total: extractedData.total,
+        date: extractedData.date,
+        raw_data: extractedData
+      })
+      .eq('id', receipt.id);
+
+    if (updateError) {
+      throw updateError;
     }
 
-    console.log('Extracted data:', extractedData);
-    return NextResponse.json(extractedData);
+    return NextResponse.json({ success: true, data: extractedData });
   } catch (error) {
     console.error('Error processing receipt:', error);
     return NextResponse.json(
-      { error: (error as Error).message || 'Failed to process receipt' },
+      { error: (error as Error).message },
       { status: 500 }
     );
   }
