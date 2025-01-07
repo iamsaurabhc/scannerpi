@@ -263,8 +263,10 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
       const base64Response = await fetch(imageData);
       const blob = await base64Response.blob();
 
-      // Upload to Supabase Storage
+      // Create a unique filename with project ID
       const fileName = `receipts/${selectedProject.id}/${Date.now()}.jpg`;
+      
+      // Upload to Supabase Storage with project-specific path
       const { data: fileData, error: uploadError } = await supabase.storage
         .from('receipts')
         .upload(fileName, blob, {
@@ -274,12 +276,12 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
+      // Get public URL for thumbnail
       const { data: { publicUrl } } = supabase.storage
         .from('receipts')
         .getPublicUrl(fileName);
 
-      // Create receipt record with correct column names
+      // Create initial receipt record with processing status
       const { data, error } = await supabase
         .from('receipts')
         .insert([
@@ -288,7 +290,8 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
             status: 'processing',
             receipt_date: extractedData.date,
             raw_image_url: publicUrl,
-            raw_data: extractedData
+            raw_data: extractedData,
+            created_at: new Date().toISOString()
           }
         ])
         .select()
@@ -296,8 +299,13 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
 
       if (error) throw error;
 
+      // Add new receipt to the start of the list immediately
       if (data) {
-        setReceipts(prev => [data, ...prev]);
+        setReceipts(prev => [{
+          ...data,
+          merchant: null,
+          line_items: [],
+        }, ...prev]);
         
         // Start background processing
         processReceiptInBackground(data.id);
@@ -497,6 +505,68 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
     }
   };
 
+  const ReceiptListItem = ({ receipt }: { receipt: Receipt }) => {
+    return (
+      <div
+        key={receipt.id}
+        className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
+        onClick={() => {
+          setSelectedReceipt(receipt);
+          setIsDetailsModalOpen(true);
+        }}
+      >
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          {receipt.raw_image_url && (
+            <div className="relative">
+              <img 
+                src={receipt.raw_image_url} 
+                alt="Receipt thumbnail" 
+                className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
+              />
+              {receipt.status === 'processing' && (
+                <div className="absolute inset-0 bg-black/50 rounded-md flex items-center justify-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-white" />
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex flex-col min-w-0">
+            <span className="font-medium text-sm sm:text-base truncate">
+              {receipt.status === 'completed' 
+                ? receipt.merchant?.name || 'Unknown Merchant'
+                : receipt.status === 'error'
+                ? 'Error Processing'
+                : 'Processing Receipt...'}
+            </span>
+            <span className="text-xs sm:text-sm text-muted-foreground">
+              {receipt.receipt_date 
+                ? new Date(receipt.receipt_date).toLocaleDateString()
+                : new Date(receipt.created_at).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <span className="text-base sm:text-lg font-medium whitespace-nowrap">
+            {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
+          </span>
+          <div className="flex items-center">
+            {receipt.status === 'processing' && (
+              <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+            {receipt.status === 'completed' && (
+              <Check className="h-4 w-4 text-green-500" />
+            )}
+            {receipt.status === 'error' && (
+              <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
+                Error
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       <CameraModal 
@@ -622,66 +692,7 @@ export default function ProjectDashboard({ userId }: { userId: string }) {
             ) : (
               <div className="divide-y">
                 {receipts.map((receipt) => (
-                  <div
-                    key={receipt.id}
-                    className="py-3 sm:py-4 flex items-center justify-between hover:bg-muted/50 cursor-pointer px-2 sm:px-4"
-                    onClick={() => {
-                      setSelectedReceipt(receipt);
-                      setIsDetailsModalOpen(true);
-                    }}
-                  >
-                    <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-                      {receipt.raw_image_url && (
-                        <img 
-                          src={receipt.raw_image_url} 
-                          alt="Receipt thumbnail" 
-                          className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded-md flex-shrink-0"
-                        />
-                      )}
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-medium text-sm sm:text-base truncate">
-                          {receipt.status === 'completed' 
-                            ? receipt.merchant?.name || 'Unknown Merchant'
-                            : receipt.status === 'error'
-                            ? 'Error Processing'
-                            : 'Processing...'}
-                        </span>
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          {receipt.receipt_date 
-                            ? new Date(receipt.receipt_date).toLocaleDateString()
-                            : new Date(receipt.created_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 sm:gap-4">
-                      <span className="text-base sm:text-lg font-medium whitespace-nowrap">
-                        {receipt.total ? `$${receipt.total.toFixed(2)}` : '...'}
-                      </span>
-                      <div className="flex items-center">
-                        {receipt.status === 'processing' && (
-                          <Clock className="h-4 w-4 animate-spin text-muted-foreground" />
-                        )}
-                        {receipt.status === 'completed' && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="hidden sm:inline-flex"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              exportReceiptToCSV(receipt);
-                            }}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {receipt.status === 'error' && (
-                          <span className="text-destructive text-xs sm:text-sm" title={receipt.processing_error}>
-                            Error
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                  <ReceiptListItem key={receipt.id} receipt={receipt} />
                 ))}
               </div>
             )}
